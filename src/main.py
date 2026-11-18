@@ -1,3 +1,4 @@
+from src.llm import generate_response
 
 def process_command(command):
     command = command.strip().lower()
@@ -9,7 +10,7 @@ def process_command(command):
         return "I'm NEXA, your Neural Executive Assistant."
 
     else:
-        return f"You said: {command}"
+        return generate_response(command)
 
 
 def main():
