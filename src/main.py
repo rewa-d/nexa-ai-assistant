@@ -1,4 +1,4 @@
-from src.llm import generate_response
+from src.llm import generate_response, clear_conversation_history
 
 def process_command(command):
     command = command.strip().lower()
@@ -8,6 +8,10 @@ def process_command(command):
 
     elif command == "help":
         return "I'm NEXA, your Neural Executive Assistant."
+
+    elif command == "clear":
+        clear_conversation_history()
+        return "Conversation memory cleared."
 
     else:
         return generate_response(command)
