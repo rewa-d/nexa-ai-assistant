@@ -1,8 +1,11 @@
+
 from ollama import chat
+from src.tools.calculator import calculate
+
 
 MODEL_NAME = "qwen3:4b"
-
 MAX_HISTORY_MESSAGES = 20
+MAX_TOOL_ROUNDS = 5
 
 SYSTEM_PROMPT = """
 You are NEXA (Neural Executive Assistant), an intelligent
@@ -29,6 +32,7 @@ RESPONSE STYLE:
 - Maintain a conversational tone.
 """
 
+
 conversation_history = [
     {
         "role": "system",
@@ -38,34 +42,65 @@ conversation_history = [
 
 
 
+
 def generate_response(prompt: str) -> str:
-    # Step 1: Add the user's message to conversation history
     conversation_history.append({
         "role": "user",
         "content": prompt
     })
 
-    # Step 2: Send conversation history to Qwen3
-    response = chat(
-        model=MODEL_NAME,
-        messages=conversation_history
-    )
+    for _ in range(MAX_TOOL_ROUNDS):
+        response = chat(
+            model=MODEL_NAME,
+            messages=conversation_history,
+            tools=[calculate]
+        )
 
-    # Step 3: Extract NEXA's response
-    assistant_message = response.message.content or ""
+        conversation_history.append(
+            response.message.model_dump(exclude_none=True)
+        )
 
-    # Step 4: Save NEXA's response to conversation history
+        # No tool requested: return the final answer
+        if not response.message.tool_calls:
+            assistant_message = response.message.content or ""
+
+            if len(conversation_history) > MAX_HISTORY_MESSAGES + 1:
+                conversation_history[1:-MAX_HISTORY_MESSAGES] = []
+
+            return assistant_message
+
+        # Execute each requested tool
+        for tool_call in response.message.tool_calls:
+            function_name = tool_call.function.name
+            arguments = tool_call.function.arguments
+
+            if function_name == "calculate":
+                try:
+                    result = calculate(**arguments)
+                    tool_result = str(result)
+                except (ValueError, TypeError) as error:
+                    tool_result = f"Calculator error: {error}"
+            else:
+                tool_result = f"Unknown tool: {function_name}"
+
+            print(f"[TOOL] {function_name}: {tool_result}")
+
+            conversation_history.append({
+                "role": "tool",
+                "tool_name": function_name,
+                "content": tool_result
+            })
+
+    # Safety limit: stop after too many tool rounds
     conversation_history.append({
         "role": "assistant",
-        "content": assistant_message
+        "content": "I reached my tool execution limit."
     })
 
-    # Step 5: Keep only the latest 20 messages + system prompt
     if len(conversation_history) > MAX_HISTORY_MESSAGES + 1:
         conversation_history[1:-MAX_HISTORY_MESSAGES] = []
 
-    # Step 6: Return NEXA's response
-    return assistant_message
+    return "I reached my tool execution limit. Please simplify your request."
 
 
 def clear_conversation_history() -> None:
@@ -75,4 +110,3 @@ def clear_conversation_history() -> None:
         "role": "system",
         "content": SYSTEM_PROMPT
     })
-
